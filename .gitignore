@@ -4,3 +4,4 @@ consumer/.*
 .agents
 .gitignore
 context/
+dataprovider/config.yaml

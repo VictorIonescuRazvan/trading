@@ -1,7 +1,10 @@
 import asyncio
 from collections import deque
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Any, Callable, Deque, Dict, Iterable, List, Optional, Tuple
+
+import exchange_calendars as xcals
+import pandas as pd
 
 from .dataprovider import Dataprovider
 
@@ -29,6 +32,7 @@ class Aggregator:
         batch_size = max(1, int(provider_settings.get("batch_size", 1)))
         time_interval = max(1, int(provider_settings.get("time_interval", 1)))
         max_query_size = max(1, int(provider_settings.get("max_query_size", 5000)))
+        exchange_calendar = str(provider_settings.get("exchange_calendar", "XNYS"))
         endpoint = provider_settings.get("endpoint")
         api_key_b64 = provider_settings.get("api_key_b64")
 
@@ -36,12 +40,17 @@ class Aggregator:
             raise ValueError("settings['dataprovider']['endpoint'] is required")
         if not api_key_b64:
             raise ValueError("settings['dataprovider']['api_key_b64'] is required")
+        try:
+            xcals.get_calendar(exchange_calendar)
+        except Exception as error:
+            raise ValueError(f"unknown exchange calendar: {exchange_calendar}") from error
 
         return {
             "dataprovider": {
                 "batch_size": batch_size,
                 "time_interval": time_interval,
                 "max_query_size": max_query_size,
+                "exchange_calendar": exchange_calendar,
                 "endpoint": endpoint,
                 "api_key_b64": api_key_b64,
             },
@@ -60,6 +69,8 @@ class Aggregator:
                 self.settings = self._validate_settings(settings)
                 self.batch_size = self.settings["dataprovider"]["batch_size"]
                 self.provider_interval = self.settings["dataprovider"]["time_interval"]
+                self.max_query_size = self.settings["dataprovider"]["max_query_size"]
+                self.exchange_calendar = xcals.get_calendar(self.settings["dataprovider"]["exchange_calendar"])
                 self.provider_config = self.settings["dataprovider"]
             return
 
@@ -70,6 +81,8 @@ class Aggregator:
         self._initialized = True
         self.batch_size = self.settings["dataprovider"]["batch_size"]
         self.provider_interval = self.settings["dataprovider"]["time_interval"]
+        self.max_query_size = self.settings["dataprovider"]["max_query_size"]
+        self.exchange_calendar = xcals.get_calendar(self.settings["dataprovider"]["exchange_calendar"])
         self.provider_config = self.settings["dataprovider"]
 
     def handle_query(self, query: Query) -> List[Query]:
@@ -99,16 +112,42 @@ class Aggregator:
         """Split a query into provider-compatible chunks, each under the API limit."""
         symbol, start_date, end_date = self._normalize_query(query)
 
-        max_requested_points = 5000
-        max_points_per_chunk = max_requested_points - 1
-        chunk_span = max_points_per_chunk * self.provider_interval * 60
-        chunk_delta = timedelta(seconds=chunk_span)
+        start_bound = pd.Timestamp(start_date)
+        end_bound = pd.Timestamp(end_date)
+        preserve_naive = start_bound.tzinfo is None
+        if preserve_naive:
+            start_bound = start_bound.tz_localize("UTC")
+            end_bound = end_bound.tz_localize("UTC")
+        else:
+            start_bound = start_bound.tz_convert("UTC")
+            end_bound = end_bound.tz_convert("UTC")
+
+        trading_minutes = self.exchange_calendar.sessions_minutes(
+            start_bound.date(), end_bound.date()
+        )
+        trading_minutes = trading_minutes[
+            (trading_minutes >= start_bound) & (trading_minutes < end_bound)
+        ]
+        if not len(trading_minutes):
+            return [(symbol, start_date, end_date)]
+
+        max_points_per_chunk = max(1, self.max_query_size - 1)
+        trading_minutes_per_chunk = max_points_per_chunk * self.provider_interval
+
+        def to_datetime(value: pd.Timestamp) -> datetime:
+            result = value.to_pydatetime()
+            return result.replace(tzinfo=None) if preserve_naive else result
 
         intervals: List[Query] = []
         current_start = start_date
-
-        while current_start < end_date:
-            current_end = min(current_start + chunk_delta, end_date)
+        for chunk_start in range(0, len(trading_minutes), trading_minutes_per_chunk):
+            chunk_end = min(chunk_start + trading_minutes_per_chunk, len(trading_minutes))
+            if chunk_end == len(trading_minutes):
+                current_end = end_date
+            else:
+                current_end = to_datetime(
+                    trading_minutes[chunk_end - 1] + pd.Timedelta(minutes=1)
+                )
             intervals.append((symbol, current_start, current_end))
             current_start = current_end
 

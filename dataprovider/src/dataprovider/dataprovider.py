@@ -1,8 +1,29 @@
 import asyncio
 import base64
+import logging
+from pathlib import Path
 from typing import Optional, Dict, Any
 import aiohttp
 from datetime import datetime
+
+
+REQUEST_LOG_PATH = Path("/var/log/dataprovider/requests.log")
+request_logger = logging.getLogger("dataprovider.requests")
+request_logger.setLevel(logging.INFO)
+request_logger.propagate = False
+
+
+def _configure_request_logger() -> None:
+    for handler in request_logger.handlers[:]:
+        if isinstance(handler, logging.FileHandler) and Path(handler.baseFilename) == REQUEST_LOG_PATH:
+            return
+        request_logger.removeHandler(handler)
+        handler.close()
+
+    REQUEST_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    handler = logging.FileHandler(REQUEST_LOG_PATH)
+    handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
+    request_logger.addHandler(handler)
 
 
 class Dataprovider:
@@ -29,10 +50,6 @@ class Dataprovider:
         self.symbol = symbol
         self.start_date = start_date
         self.end_date = end_date
-        requested_points = (end_date - start_date).total_seconds() / (self.time_interval * 60)
-        # The public API limits each request to fewer than 5,000 data points.
-        if requested_points >= 5000:
-            raise ValueError("requested date range must contain fewer than 5,000 data points")
         self.endpoint = str(config.get("endpoint", ""))
         self.api_key = self._decode_api_key(str(config.get("api_key_b64", "")))
         self._data: Optional[Dict[str, Any]] = None  # Dictionary keyed by datetime strings
@@ -64,8 +81,11 @@ class Dataprovider:
                     "interval": f"{self.time_interval}min", 
                     "outputsize": 5000
                 }
-                print(params)
+                _configure_request_logger()
+                logged_params = {key: value for key, value in params.items() if key != "apikey"}
+                request_logger.info("request method=GET url=%s params=%s", self.endpoint, logged_params)
                 async with session.get(self.endpoint, params=params, timeout=30) as response:
+                    request_logger.info("response status=%s url=%s", response.status, self.endpoint)
                     if response.status == 200:
                         data = await response.json()
                         # Transform Twelve Data response to dictionary keyed by datetime
@@ -104,7 +124,6 @@ class Dataprovider:
         """
         if not isinstance(data, dict):
             raise ValueError("response must be a JSON object")
-        print(data.get('meta', []))
         # Extract values array from Twelve Data response
         values = data.get('values', [])
         if not isinstance(values, list):
