@@ -11,6 +11,8 @@ from .dataprovider import Dataprovider
 
 Query = Tuple[str, datetime, datetime]
 
+Query = Tuple[str, datetime, datetime]
+
 
 class Aggregator:
     """Singleton queue and worker for data-provider queries."""

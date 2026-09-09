@@ -1,7 +1,4 @@
 __pycache__/
 uv.lock
-consumer/.*
-.agents
 .gitignore
-context/
 dataprovider/config.yaml
