@@ -2,4 +2,3 @@ __pycache__/
 uv.lock
 .gitignore
 dataprovider/config.yaml
-dataprovider/config.yaml
