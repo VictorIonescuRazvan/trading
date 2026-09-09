@@ -1,0 +1,6 @@
+dataprovider:
+  batch_size: 8
+  time_interval: 1
+  max_query_size: 5000
+  endpoint: https://api.twelvedata.com/time_series
+  api_key_b64: "XXXX"
