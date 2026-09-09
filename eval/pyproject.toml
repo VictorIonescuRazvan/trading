@@ -1,0 +1,38 @@
+[project]
+name = "eval"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "connector>=0.1.0",
+    "fastapi[standard,standard-no-fastapi-cloud-cli]>=0.141.1",
+    "httpx>=0.28.1",
+    "pyyaml>=6.0.3",
+]
+
+[project.scripts]
+eval = "eval:main"
+
+[tool.fastapi]
+entrypoint = "eval.app:app"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]
+
+[tool.pytest.ini_options]
+pythonpath = [".", "src", "packages/connector/src", "../tickerplant/src"]
+
+[build-system]
+requires = ["uv_build>=0.12.6,<0.13.0"]
+build-backend = "uv_build"
+
+[tool.uv.workspace]
+members = [
+    "packages/connector",
+]
+
+[tool.uv.sources]
+connector = { workspace = true }
