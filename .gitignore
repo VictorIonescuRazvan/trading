@@ -3,3 +3,4 @@ uv.lock
 consumer/.*
 .agents
 .gitignore
+context/
