@@ -1,0 +1,2 @@
+# /etc/tickerplant/config.yaml
+db_file: /var/tickerplant/db.sql
