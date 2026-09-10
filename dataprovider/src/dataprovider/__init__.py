@@ -1,2 +1,10 @@
+from .app import app
+
+
 def main() -> None:
-    print("Hello from dataprovider!")
+    import uvicorn
+
+    uvicorn.run("dataprovider.app:app", host="0.0.0.0", port=8001)
+
+
+__all__ = ["app", "main"]

@@ -54,6 +54,7 @@ class Dataprovider:
         self.api_key = self._decode_api_key(str(config.get("api_key_b64", "")))
         self._data: Optional[Dict[str, Any]] = None  # Dictionary keyed by datetime strings
         self._response_error: Optional[str] = None
+        self.response_status: Optional[int] = None
         
         self._fetch_task = asyncio.create_task(self._fetch_data())
     
@@ -86,6 +87,7 @@ class Dataprovider:
                 request_logger.info("request method=GET url=%s params=%s", self.endpoint, logged_params)
                 async with session.get(self.endpoint, params=params, timeout=30) as response:
                     request_logger.info("response status=%s url=%s", response.status, self.endpoint)
+                    self.response_status = response.status
                     if response.status == 200:
                         data = await response.json()
                         # Transform Twelve Data response to dictionary keyed by datetime

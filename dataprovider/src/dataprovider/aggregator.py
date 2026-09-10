@@ -114,6 +114,12 @@ class Aggregator:
         """Split a query into provider-compatible chunks, each under the API limit."""
         symbol, start_date, end_date = self._normalize_query(query)
 
+        exchange_calendar = getattr(self, "exchange_calendar", None)
+        if exchange_calendar is None:
+            exchange_calendar = xcals.get_calendar(
+                self.provider_config.get("exchange_calendar", "XNYS")
+            )
+
         start_bound = pd.Timestamp(start_date)
         end_bound = pd.Timestamp(end_date)
         preserve_naive = start_bound.tzinfo is None
@@ -124,7 +130,7 @@ class Aggregator:
             start_bound = start_bound.tz_convert("UTC")
             end_bound = end_bound.tz_convert("UTC")
 
-        trading_minutes = self.exchange_calendar.sessions_minutes(
+        trading_minutes = exchange_calendar.sessions_minutes(
             start_bound.date(), end_bound.date()
         )
         trading_minutes = trading_minutes[
@@ -133,7 +139,12 @@ class Aggregator:
         if not len(trading_minutes):
             return [(symbol, start_date, end_date)]
 
-        max_points_per_chunk = max(1, self.max_query_size - 1)
+        max_query_size = getattr(
+            self,
+            "max_query_size",
+            int(self.provider_config.get("max_query_size", 5000)),
+        )
+        max_points_per_chunk = max(1, max_query_size - 2)
         trading_minutes_per_chunk = max_points_per_chunk * self.provider_interval
 
         def to_datetime(value: pd.Timestamp) -> datetime:
@@ -180,6 +191,11 @@ class Aggregator:
                 data = provider.result()
 
                 if response_error is not None or data is None:
+                    response_status = getattr(provider, "response_status", None)
+                    if response_status == 429 or (
+                        response_status is None and "Status: 429" in (response_error or "")
+                    ):
+                        await asyncio.sleep(60)
                     self.queue.appendleft(query)
                     return None
                 return data

@@ -152,6 +152,12 @@ def get_metadata(
 
     return retvalue
 
+@app.get("/getpending")
+def get_pending(
+    start: Annotated[str, Query()],
+    end: Annotated[str, Query()],
+) -> list[dict[str, Any]]:
+    if metadata is 
 
 @app.post("/data", status_code=204)
 def push_data(request: DataRequest) -> None:

@@ -1,3 +1,10 @@
+#/etc/dataprovider/config.yaml
+tickerplant:
+  url: http://localhost:8000
+symbols:
+  - AAPL
+start: 2024-01-01T00:00:00Z
+end: 2024-12-31T23:59:59Z
 dataprovider:
   batch_size: 8
   time_interval: 1

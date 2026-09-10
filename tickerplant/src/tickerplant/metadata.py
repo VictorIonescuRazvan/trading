@@ -83,16 +83,20 @@ class Metadata:
 
     def _get(
         self,
-        symbol: str,
+        symbol: str | None,
         status: int,
-        start_date: datetime,
-        end_date: datetime,
-    ) -> list[tuple[int, int]]:
-        month_keys = _month_keys(start_date, end_date)
-        if not month_keys:
-            return []
+        start_date: datetime | None,
+        end_date: datetime | None,
+    ) -> list[tuple[str, int, int]]:
+        # month_keys
+        month_keys =  _month_keys(start_date, end_date) if start_date and end_date else None
+        if month_keys:
+            month_clause = " OR ".join("(year = ? AND month = ?)" for _ in month_keys)
+        else:
+            month_clause = "1=1"
 
-        clause = " OR ".join("(year = ? AND month = ?)" for _ in month_keys)
+        # symbol
+        symbol_clause = "symbol = ?" if symbol is not None else "1=1"
         params: list[object] = [symbol, status]
         for year, month in month_keys:
             params.extend((year, month))
@@ -102,28 +106,28 @@ class Metadata:
                 f"""
                 SELECT year, month
                 FROM symbolMetadata
-                WHERE symbol = ? AND status = ? AND ({clause})
+                WHERE {symbol_clause} AND status = ? AND ({month_clause})
                 ORDER BY year, month
                 """,
                 params,
             ).fetchall()
 
-        return [(year, month) for year, month in rows]
+        return [(symbol, year, month) for symbol, year, month in rows]
 
     def getPending(
         self,
-        symbol: str,
-        start_date: datetime,
-        end_date: datetime,
-    ) -> list[tuple[int, int]]:
+        symbol: str | None,
+        start_date: datetime | None,
+        end_date: datetime | None,
+    ) -> list[tuple[str, int, int]]:
         return self._get(symbol, status=0, start_date=start_date, end_date=end_date)
 
     def getDone(
         self,
         symbol: str,
-        start_date: datetime,
-        end_date: datetime,
-    ) -> list[tuple[int, int]]:
+        start_date: datetime | None,
+        end_date: datetime | None,
+    ) -> list[tuple[str, int, int]]:
         return self._get(symbol, status=1, start_date=start_date, end_date=end_date)
 
     def pushPending(self, values: MetadataMonths) -> None:
