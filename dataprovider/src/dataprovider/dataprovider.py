@@ -6,8 +6,8 @@ from typing import Optional, Dict, Any
 import aiohttp
 from datetime import datetime
 
+from .logging_config import REQUEST_LOG_PATH, DataproviderFormatter
 
-REQUEST_LOG_PATH = Path("/var/log/dataprovider/requests.log")
 request_logger = logging.getLogger("dataprovider.requests")
 request_logger.setLevel(logging.INFO)
 request_logger.propagate = False
@@ -20,9 +20,8 @@ def _configure_request_logger() -> None:
         request_logger.removeHandler(handler)
         handler.close()
 
-    REQUEST_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
     handler = logging.FileHandler(REQUEST_LOG_PATH)
-    handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
+    handler.setFormatter(DataproviderFormatter())
     request_logger.addHandler(handler)
 
 

@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from collections import deque
 from datetime import datetime
 from typing import Any, Callable, Deque, Dict, Iterable, List, Optional, Tuple
@@ -9,7 +10,10 @@ import pandas as pd
 from .dataprovider import Dataprovider
 
 
+
 Query = Tuple[str, datetime, datetime]
+
+worker_queue_logger = logging.getLogger("dataprovider.worker_queue")
 
 Query = Tuple[str, datetime, datetime]
 
@@ -92,6 +96,7 @@ class Aggregator:
         symbol, start_date, end_date = self._normalize_query(query)
         intervals = self.split_query((symbol, start_date, end_date))
         self.queue.extend(intervals)
+        worker_queue_logger.info("added %d queue elements symbol=%s", len(intervals), symbol)
         self.start_worker()
         return list(intervals)
 
@@ -177,6 +182,7 @@ class Aggregator:
             if not self.queue:
                 break
             queued_queries.append(self.queue.popleft())
+            worker_queue_logger.info("popped queue element query=%s", queued_queries[-1])
 
         if not queued_queries:
             return []
@@ -195,12 +201,19 @@ class Aggregator:
                     if response_status == 429 or (
                         response_status is None and "Status: 429" in (response_error or "")
                     ):
+                        worker_queue_logger.error("public API rate limit symbol=%s", query[0])
                         await asyncio.sleep(60)
+                    else:
+                        worker_queue_logger.critical(
+                            "public API failure symbol=%s", query[0]
+                        )
                     self.queue.appendleft(query)
+                    worker_queue_logger.info("requeued queue element query=%s", query)
                     return None
                 return data
-            except Exception:
+            except Exception as error:
                 self.queue.appendleft(query)
+                worker_queue_logger.critical("public API failure symbol=%s error=%s", query[0], error)
                 return None
 
         payloads = await asyncio.gather(*(_fetch_payload(query) for query in queued_queries))

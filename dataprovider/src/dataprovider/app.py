@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -10,10 +11,13 @@ from connector.connector import TickerplantConnector
 from fastapi import FastAPI
 
 from .aggregator import Aggregator
+from .logging_config import configure_logging
 
 
 CONFIG_PATH = Path("/etc/dataprovider/config.yaml")
 POLL_INTERVAL_SECONDS = 60
+config_logger = logging.getLogger("dataprovider.config")
+worker_queue_logger = logging.getLogger("dataprovider.worker_queue")
 
 
 def load_config(path: Path = CONFIG_PATH) -> dict[str, Any]:
@@ -22,6 +26,16 @@ def load_config(path: Path = CONFIG_PATH) -> dict[str, Any]:
 	if not isinstance(config, dict):
 		raise ValueError("configuration must be a mapping")
 	return config
+
+
+def _loggable_config(config: dict[str, Any]) -> dict[str, Any]:
+	loggable = dict(config)
+	dataprovider_config = loggable.get("dataprovider")
+	if isinstance(dataprovider_config, dict):
+		loggable["dataprovider"] = dict(dataprovider_config)
+		if "api_key_b64" in loggable["dataprovider"]:
+			loggable["dataprovider"]["api_key_b64"] = "<redacted>"
+	return loggable
 
 
 def _month_bounds(year: int, month: int) -> tuple[datetime, datetime]:
@@ -57,7 +71,9 @@ async def process_pending_month(
 	month: int,
 ) -> bool:
 	start, end = _month_bounds(year, month)
-	aggregator.queue.extend(aggregator.split_query((symbol, start, end)))
+	intervals = aggregator.split_query((symbol, start, end))
+	aggregator.queue.extend(intervals)
+	worker_queue_logger.info("added %d queue elements symbol=%s", len(intervals), symbol)
 
 	records: list[dict[str, Any]] = []
 	while aggregator.queue:
@@ -68,8 +84,18 @@ async def process_pending_month(
 			if payload:
 				records.extend(_provider_records(payload))
 
-	connector.data({symbol: records})
-	connector.setdone(symbol, year, month)
+	try:
+		connector.data({symbol: records})
+		worker_queue_logger.info("pushed data to tickerplant symbol=%s records=%d", symbol, len(records))
+		connector.setdone(symbol, year, month)
+	except Exception:
+		worker_queue_logger.critical(
+			"failed to push data to tickerplant symbol=%s year=%d month=%d",
+			symbol,
+			year,
+			month,
+		)
+		raise
 	return True
 
 
@@ -119,7 +145,9 @@ async def _poll_loop(config: dict[str, Any]) -> None:
 
 
 async def lifespan(_: FastAPI):
+	configure_logging()
 	config = load_config()
+	config_logger.info("loaded configuration path=%s config=%s", CONFIG_PATH, _loggable_config(config))
 	task = asyncio.create_task(_poll_loop(config))
 	try:
 		yield

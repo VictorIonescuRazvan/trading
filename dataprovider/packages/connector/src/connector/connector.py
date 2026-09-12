@@ -1,8 +1,12 @@
 from __future__ import annotations
 
 from typing import Any
+import logging
 
 import httpx
+
+
+request_logger = logging.getLogger("dataprovider.requests")
 
 
 class TickerplantConnector:
@@ -20,9 +24,18 @@ class TickerplantConnector:
         request = getattr(self.client, "request", None)
         if request is None:
             raise TypeError("Client must implement a request(method, url, **kwargs) method")
-        response = request(method, path, **kwargs)
+        try:
+            response = request(method, path, **kwargs)
+        except Exception:
+            request_logger.critical("tickerplant request failed method=%s path=%s", method, path)
+            raise
         if hasattr(response, "raise_for_status"):
-            response.raise_for_status()
+            try:
+                response.raise_for_status()
+            except Exception:
+                request_logger.critical("tickerplant request failed method=%s path=%s", method, path)
+                raise
+        request_logger.info("tickerplant request succeeded method=%s path=%s", method, path)
         return response
 
     def meta(self, symbol: str, start: str, end: str) -> list[dict[str, Any]]:
