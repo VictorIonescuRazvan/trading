@@ -6,12 +6,13 @@ from pathlib import Path
 from typing import Annotated, Any
 
 import yaml
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .dbquery import DBQuery
 from .init_db import init_db
 from .metadata import Metadata
+from .querylog import log_request
 
 
 class MetadataEntry(BaseModel):
@@ -45,6 +46,17 @@ class MinuteRecord(BaseModel):
 
 class DataRequest(BaseModel):
     data: dict[str, list[MinuteRecord]] = Field(min_length=1)
+
+
+class GetDataRequest(BaseModel):
+    start: datetime
+    end: datetime
+    symbols: list[str] = Field(min_length=1)
+
+    @field_validator("start", "end")
+    @classmethod
+    def require_aware_date(cls, value: datetime) -> datetime:
+        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
 
 
 def _parse_iso(value: str, name: str) -> datetime:
@@ -108,6 +120,19 @@ metadata: Metadata | None = None
 app = FastAPI(title="Tickerplant API")
 
 
+@app.middleware("http")
+async def log_received_request(request: Request, call_next: Any) -> Any:
+    body = await request.body()
+    request_line = f"{request.method} {request.url.path}"
+    if request.url.query:
+        request_line += f"?{request.url.query}"
+    if body:
+        request_body = " ".join(body.decode("utf-8", errors="replace").split())
+        request_line += f" {request_body}"
+    log_request("api", "request", request_line)
+    return await call_next(request)
+
+
 @app.on_event("startup")
 def initialize_database() -> None:
     global dbquery, metadata
@@ -157,7 +182,17 @@ def get_pending(
     start: Annotated[str, Query()],
     end: Annotated[str, Query()],
 ) -> list[dict[str, Any]]:
-    if metadata is 
+    if metadata is None:
+        raise HTTPException(status_code=500, detail="database is not initialized")
+
+    _, start_date, end_date = _sanitize_meta("A", start, end)
+    try:
+        return [
+            {"symbol": symbol, "year": year, "month": month}
+            for symbol, year, month in metadata.getPending(None, start_date, end_date)
+        ]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Error retrieving metadata") from e
 
 @app.post("/data", status_code=204)
 def push_data(request: DataRequest) -> None:
@@ -173,6 +208,23 @@ def push_data(request: DataRequest) -> None:
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail="Error inserting data")
+
+
+@app.post("/getdata")
+def get_data(request: GetDataRequest) -> list[dict[str, Any]]:
+    if dbquery is None:
+        raise HTTPException(status_code=500, detail="database is not initialized")
+    if request.start > request.end:
+        raise HTTPException(status_code=422, detail="start must not be after end")
+
+    try:
+        return [
+            record
+            for symbol in request.symbols
+            for record in dbquery.select(symbol, request.start, request.end)
+        ]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Error retrieving data") from e
 
 
 @app.post("/setdone", response_model=MetadataEntry)

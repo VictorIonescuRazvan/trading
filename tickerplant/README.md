@@ -96,6 +96,29 @@ curl -i -X POST http://127.0.0.1:8000/data \
 
 This returns `204 No Content` and inserts the row into the `symbols` table.
 
+### `POST /getdata`
+
+Return all stored data rows for the requested symbols and inclusive ISO date
+range. This endpoint queries the `symbols` table directly and does not require
+or check corresponding metadata entries. Symbols with no matching rows simply
+produce no results.
+
+```bash
+curl -X POST http://127.0.0.1:8000/getdata \
+	-H 'Content-Type: application/json' \
+	-d '{
+		"start": "2024-01-15T00:00:00Z",
+		"end": "2024-01-15T23:59:59Z",
+		"symbols": ["AAPL", "MSFT"]
+	}'
+```
+
+The response is a JSON list of matching rows, including the stored `symbol`:
+
+```json
+[{"symbol":"AAPL","date":"2024-01-15T14:30:00Z","low":184.1,"high":185.2,"open":184.5,"close":184.9,"volume":1200}]
+```
+
 ### `GET /meta`
 
 Return pending metadata months for a ticker and inclusive ISO date range:

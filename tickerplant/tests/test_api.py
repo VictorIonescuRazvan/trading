@@ -3,6 +3,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 import tickerplant.api as api
+import tickerplant.querylog as querylog
 
 
 def test_data_setdone_and_meta_endpoints(tmp_path, monkeypatch):
@@ -72,3 +73,67 @@ def test_data_setdone_and_meta_endpoints(tmp_path, monkeypatch):
         ).fetchall() == [("ZZZ9", 2024, 2, 1)]
     finally:
         connection.close()
+
+
+def test_getdata_queries_data_without_metadata_validation(tmp_path, monkeypatch):
+    config_path = tmp_path / "config.yaml"
+    db_path = tmp_path / "tickerplant.db"
+    config_path.write_text(f"db_file: {db_path}\n", encoding="utf-8")
+    monkeypatch.setattr(api, "_config_path", Path(config_path))
+
+    with TestClient(api.app) as client:
+        response = client.post(
+            "/data",
+            json={
+                "data": {
+                    "UNVERIFIED_SYMBOL": [
+                        {
+                            "date": "2024-02-15T14:30:00Z",
+                            "low": 10.0,
+                            "high": 11.0,
+                            "open": 10.5,
+                            "close": 10.8,
+                            "volume": 100,
+                        }
+                    ]
+                }
+            },
+        )
+        assert response.status_code == 204
+
+        response = client.post(
+            "/getdata",
+            json={
+                "start": "2024-02-15T00:00:00Z",
+                "end": "2024-02-15T23:59:59Z",
+                "symbols": ["UNVERIFIED_SYMBOL", "MISSING"],
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.json() == [
+        {
+            "symbol": "UNVERIFIED_SYMBOL",
+            "date": "2024-02-15T14:30:00Z",
+            "low": 10.0,
+            "high": 11.0,
+            "open": 10.5,
+            "close": 10.8,
+            "volume": 100,
+        }
+    ]
+
+
+def test_api_logs_received_requests(tmp_path, monkeypatch):
+    config_path = tmp_path / "config.yaml"
+    db_path = tmp_path / "tickerplant.db"
+    request_log_path = tmp_path / "requests.log"
+    config_path.write_text(f"db_file: {db_path}\n", encoding="utf-8")
+    monkeypatch.setattr(api, "_config_path", Path(config_path))
+    monkeypatch.setattr(querylog, "REQUEST_LOG_PATH", request_log_path)
+
+    with TestClient(api.app) as client:
+        response = client.get("/meta", params={"symbol": "AAPL", "start": "2024-01-01", "end": "2024-01-31"})
+
+    assert response.status_code == 200
+    assert "api-7-request: GET /meta?symbol=AAPL&start=2024-01-01&end=2024-01-31" in request_log_path.read_text()

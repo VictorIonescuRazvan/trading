@@ -32,3 +32,19 @@ def test_metadata_accepts_db_path_and_queries_interval(tmp_path):
 
     assert metadata.getPending("AAPL", start, end) == [(2024, 1), (2024, 3)]
     assert metadata.getDone("AAPL", start, end) == [(2024, 2)]
+
+
+def test_metadata_supports_symbol_wide_and_optional_date_queries(tmp_path):
+    metadata = Metadata(tmp_path / "tickers.db")
+    metadata.pushPending({"AAPL": (2024, 1), "MSFT": (2024, 2)})
+    metadata.pushDone({"AAPL": (2024, 2)})
+
+    start = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    end = datetime(2024, 2, 28, tzinfo=timezone.utc)
+
+    assert metadata.getPending(None, start, end) == [
+        ("AAPL", 2024, 1),
+        ("MSFT", 2024, 2),
+    ]
+    assert metadata.getDone(None, None, None) == [("AAPL", 2024, 2)]
+    assert metadata.getPending("AAPL", None, None) == [(2024, 1)]

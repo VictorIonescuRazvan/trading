@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Mapping
 
 from .init_db import init_db
+from .querylog import log_query
 
 MetadataMonths = Mapping[str, tuple[int, int]]
 
@@ -55,30 +56,30 @@ class Metadata:
 
         with self._lock:
             for symbol, year, month, incoming_status in rows:
-                existing = self.db.execute(
-                    """
+                select_query = """
                     SELECT status
                     FROM symbolMetadata
                     WHERE symbol = ? AND year = ? AND month = ?
-                    """,
-                    (symbol, year, month),
-                ).fetchone()
-                self.db.execute(
                     """
+                select_params = (symbol, year, month)
+                log_query("metadata", "_push", select_query, select_params)
+                existing = self.db.execute(select_query, select_params).fetchone()
+
+                delete_query = """
                     DELETE FROM symbolMetadata
                     WHERE symbol = ? AND year = ? AND month = ?
-                    """,
-                    (symbol, year, month),
-                )
+                    """
+                log_query("metadata", "_push", delete_query, select_params)
+                self.db.execute(delete_query, select_params)
 
                 final_status = max(existing[0], incoming_status) if existing else incoming_status
-                self.db.execute(
-                    """
+                insert_query = """
                     INSERT INTO symbolMetadata (symbol, year, month, status)
                     VALUES (?, ?, ?, ?)
-                    """,
-                    (symbol, year, month, final_status),
-                )
+                    """
+                insert_params = (symbol, year, month, final_status)
+                log_query("metadata", "_push", insert_query, insert_params)
+                self.db.execute(insert_query, insert_params)
             self.db.commit()
 
     def _get(
@@ -87,32 +88,44 @@ class Metadata:
         status: int,
         start_date: datetime | None,
         end_date: datetime | None,
-    ) -> list[tuple[str, int, int]]:
-        # month_keys
-        month_keys =  _month_keys(start_date, end_date) if start_date and end_date else None
-        if month_keys:
-            month_clause = " OR ".join("(year = ? AND month = ?)" for _ in month_keys)
-        else:
-            month_clause = "1=1"
+    ) -> list[tuple[int, int]] | list[tuple[str, int, int]]:
+        clauses: list[str] = []
+        params: list[object] = []
 
-        # symbol
-        symbol_clause = "symbol = ?" if symbol is not None else "1=1"
-        params: list[object] = [symbol, status]
-        for year, month in month_keys:
-            params.extend((year, month))
+        if symbol is not None:
+            clauses.append("symbol = ?")
+            params.append(symbol)
+
+        clauses.append("status = ?")
+        params.append(status)
+
+        if start_date is not None and end_date is not None:
+            month_keys = _month_keys(start_date, end_date)
+            clauses.append(
+                "(" + " OR ".join("(year = ? AND month = ?)" for _ in month_keys) + ")"
+            )
+            for year, month in month_keys:
+                params.extend((year, month))
+        elif start_date is not None:
+            clauses.append("(year > ? OR (year = ? AND month >= ?))")
+            params.extend((start_date.year, start_date.year, start_date.month))
+        elif end_date is not None:
+            clauses.append("(year < ? OR (year = ? AND month <= ?))")
+            params.extend((end_date.year, end_date.year, end_date.month))
 
         with self._lock:
-            rows = self.db.execute(
-                f"""
-                SELECT year, month
+            query = f"""
+                SELECT symbol, year, month
                 FROM symbolMetadata
-                WHERE {symbol_clause} AND status = ? AND ({month_clause})
+                WHERE {' AND '.join(clauses)}
                 ORDER BY year, month
-                """,
-                params,
-            ).fetchall()
+                """
+            log_query("metadata", "_get", query, params)
+            rows = self.db.execute(query, params).fetchall()
 
-        return [(symbol, year, month) for symbol, year, month in rows]
+        if symbol is not None:
+            return [(year, month) for _, year, month in rows]
+        return [(row_symbol, year, month) for row_symbol, year, month in rows]
 
     def getPending(
         self,
@@ -124,10 +137,10 @@ class Metadata:
 
     def getDone(
         self,
-        symbol: str,
+        symbol: str | None,
         start_date: datetime | None,
         end_date: datetime | None,
-    ) -> list[tuple[str, int, int]]:
+    ) -> list[tuple[int, int]] | list[tuple[str, int, int]]:
         return self._get(symbol, status=1, start_date=start_date, end_date=end_date)
 
     def pushPending(self, values: MetadataMonths) -> None:

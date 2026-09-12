@@ -8,6 +8,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping
 
+from .querylog import log_query
+
 SymbolRecord = Mapping[str, Any]
 SymbolRecords = Mapping[str, Iterable[SymbolRecord]]
 
@@ -76,13 +78,13 @@ class DBQuery:
                 raise TypeError("each symbol value must be an iterable of records") from exc
 
         with self._lock:
-            self.db.executemany(
-                """
+            query = """
                 INSERT INTO symbols (symbol, date, low, high, open, close, volume)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
-                """,
-                rows,
-            )
+                """
+            for row in rows:
+                log_query("dbquery", "insert", query, row)
+            self.db.executemany(query, rows)
             self.db.commit()
 
     def select(
@@ -96,15 +98,15 @@ class DBQuery:
             raise ValueError("start must not be after end")
 
         with self._lock:
-            rows = self.db.execute(
-                """
+            query = """
                 SELECT symbol, date, low, high, open, close, volume
                 FROM symbols
                 WHERE symbol = ? AND date BETWEEN ? AND ?
                 ORDER BY date
-                """,
-                (symbol, start_value, end_value),
-            ).fetchall()
+                """
+            params = (symbol, start_value, end_value)
+            log_query("dbquery", "select", query, params)
+            rows = self.db.execute(query, params).fetchall()
 
         return [
             {

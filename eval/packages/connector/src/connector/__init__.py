@@ -1,2 +1,3 @@
-def hello() -> str:
-    return "Hello from connector!"
+from .connector import TickerplantConnector
+
+__all__ = ["TickerplantConnector"]

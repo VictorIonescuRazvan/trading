@@ -53,9 +53,32 @@ The result is a list of metadata rows, for example:
 
 ```python
 [
-	{"symbol": "AAPL", "year": 2024, "month": 1, "status": 0},
-	{"symbol": "AAPL", "year": 2024, "month": 2, "status": 0},
+	{"year": 2024, "month": 1},
+	{"year": 2024, "month": 2},
 ]
+```
+
+#### `getpending(start: str, end: str) -> list[dict[str, Any]]`
+
+Fetches pending metadata for all symbols in an ISO 8601 date range.
+
+```python
+pending = connector.getpending(
+	start="2024-01-01T00:00:00",
+	end="2024-02-29T23:59:59",
+)
+```
+
+#### `getdata(start: str, end: str, symbols: list[str]) -> list[dict[str, Any]]`
+
+Fetches market data for the requested symbols and ISO 8601 date range.
+
+```python
+records = connector.getdata(
+	start="2024-01-02T14:30:00Z",
+	end="2024-01-02T14:31:00Z",
+	symbols=["AAPL"],
+)
 ```
 
 #### `data(data: dict[str, list[dict[str, Any]]]) -> None`

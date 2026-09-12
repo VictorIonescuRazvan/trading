@@ -78,22 +78,33 @@ async def poll_once(
 	connector: TickerplantConnector | None = None,
 	aggregator: Aggregator | None = None,
 ) -> None:
+	tickerplant_config = config.get("tickerplant", {})
+	if not isinstance(tickerplant_config, dict):
+		raise ValueError("configuration['tickerplant'] must be a mapping")
 
-	connector = connector or TickerplantConnector(tickerplant.get("url", "http://localhost:8000"))
+	connector = connector or TickerplantConnector(
+		str(tickerplant_config.get("url", "http://localhost:8000"))
+	)
 	aggregator = aggregator or Aggregator(config)
 	start = str(config.get("start", "1970-01-01T00:00:00Z"))
 	end = str(config.get("end", datetime.now(timezone.utc).isoformat()))
+	configured_symbols = config.get("symbols", [])
+	if not isinstance(configured_symbols, list):
+		raise ValueError("configuration['symbols'] must be a list")
+	allowed_symbols = {str(symbol) for symbol in configured_symbols}
 
-	for symbol in symbols:
-		pending = connector.meta(str(symbol), start, end)
-		for entry in pending:
-			await process_pending_month(
-				connector,
-				aggregator,
-				str(symbol),
-				int(entry["year"]),
-				int(entry["month"]),
-			)
+	pending = connector.getpending(start, end)
+	for entry in pending:
+		symbol = str(entry["symbol"])
+		if allowed_symbols and symbol not in allowed_symbols:
+			continue
+		await process_pending_month(
+			connector,
+			aggregator,
+			symbol,
+			int(entry["year"]),
+			int(entry["month"]),
+		)
 
 
 async def _poll_loop(config: dict[str, Any]) -> None:

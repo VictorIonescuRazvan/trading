@@ -33,11 +33,32 @@ class TickerplantConnector:
         )
         return response.json()
 
+    def getpending(self, start: str, end: str) -> list[dict[str, Any]]:
+        response = self._request(
+            "GET",
+            "/getpending",
+            params={"start": start, "end": end},
+        )
+        return response.json()
+
     def data(self, data: dict[str, list[dict[str, Any]]]) -> None:
         response = self._request("POST", "/data", json={"data": data})
         if getattr(response, "status_code", None) == 204:
             return None
         return None
+
+    def getdata(
+        self,
+        start: str,
+        end: str,
+        symbols: list[str],
+    ) -> list[dict[str, Any]]:
+        response = self._request(
+            "POST",
+            "/getdata",
+            json={"start": start, "end": end, "symbols": symbols},
+        )
+        return response.json()
 
     def setdone(self, symbol: str, year: int, month: int) -> dict[str, Any]:
         response = self._request(
