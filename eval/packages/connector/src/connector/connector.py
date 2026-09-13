@@ -17,6 +17,7 @@ class TickerplantConnector:
         base_url: str = "http://localhost:8000",
         client: httpx.Client | Any | None = None,
     ) -> None:
+        request_logger.critical("Tickerplant at %s", base_url)
         self.base_url = base_url.rstrip("/") or "http://localhost:8000"
         self.client = client if client is not None else httpx.Client(base_url=self.base_url)
 
