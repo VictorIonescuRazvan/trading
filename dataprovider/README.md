@@ -67,22 +67,12 @@ Runtime logs are written to:
 - `/var/log/dataprovider/worker_queue.log`: queue, provider, and data-push
   activity
 
+Config is at:
+- `/etc/dataprovider/config.yaml`
+
 ## Start
-
-From the project directory:
-
-```bash
-./start.bash
-```
-
-The script synchronizes dependencies and starts Uvicorn with the application
-reload option on the default port, `8000`.
-
-For a direct start without reload:
 
 ```bash
 uv sync --link-mode=copy
 uv run dataprovider
 ```
-
-The installed `dataprovider` command serves the application on `0.0.0.0:8001`.

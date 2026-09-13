@@ -144,11 +144,15 @@ async def _poll_loop(config: dict[str, Any]) -> None:
 		await asyncio.sleep(POLL_INTERVAL_SECONDS)
 
 
-async def lifespan(_: FastAPI):
+async def run_worker() -> None:
 	configure_logging()
 	config = load_config()
 	config_logger.info("loaded configuration path=%s config=%s", CONFIG_PATH, _loggable_config(config))
-	task = asyncio.create_task(_poll_loop(config))
+	await _poll_loop(config)
+
+
+async def lifespan(_: FastAPI):
+	task = asyncio.create_task(run_worker())
 	try:
 		yield
 	finally:

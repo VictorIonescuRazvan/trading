@@ -1,10 +1,11 @@
+import asyncio
+
 from .app import app
+from .app import run_worker
 
 
 def main() -> None:
-    import uvicorn
-
-    uvicorn.run("dataprovider.app:app", host="0.0.0.0", port=8001)
+    asyncio.run(run_worker())
 
 
 __all__ = ["app", "main"]

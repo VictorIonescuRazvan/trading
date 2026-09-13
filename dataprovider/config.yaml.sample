@@ -1,13 +1,9 @@
 #/etc/dataprovider/config.yaml
-tickerplant:
-  url: http://localhost:8000
-symbols:
-  - AAPL
-start: 2024-01-01T00:00:00Z
-end: 2024-12-31T23:59:59Z
 dataprovider:
   batch_size: 8
   time_interval: 1
   max_query_size: 5000
   endpoint: https://api.twelvedata.com/time_series
   api_key_b64: "XXXX"
+tickerplant_host: 127.0.0.1
+tickerplant_port: 5000
