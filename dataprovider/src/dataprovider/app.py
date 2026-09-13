@@ -38,6 +38,12 @@ def _loggable_config(config: dict[str, Any]) -> dict[str, Any]:
 	return loggable
 
 
+def _tickerplant_url(config: dict[str, Any]) -> str:
+	host = str(config.get("tickerplant_host", "localhost"))
+	port = int(config.get("tickerplant_port", 8000))
+	return f"http://{host}:{port}"
+
+
 def _month_bounds(year: int, month: int) -> tuple[datetime, datetime]:
 	start = datetime(year, month, 1, tzinfo=timezone.utc)
 	if month == 12:
@@ -104,13 +110,7 @@ async def poll_once(
 	connector: TickerplantConnector | None = None,
 	aggregator: Aggregator | None = None,
 ) -> None:
-	tickerplant_config = config.get("tickerplant", {})
-	if not isinstance(tickerplant_config, dict):
-		raise ValueError("configuration['tickerplant'] must be a mapping")
-
-	connector = connector or TickerplantConnector(
-		str(tickerplant_config.get("url", "http://localhost:8000"))
-	)
+	connector = connector or TickerplantConnector(_tickerplant_url(config))
 	aggregator = aggregator or Aggregator(config)
 	start = str(config.get("start", "1970-01-01T00:00:00Z"))
 	end = str(config.get("end", datetime.now(timezone.utc).isoformat()))
@@ -134,7 +134,7 @@ async def poll_once(
 
 
 async def _poll_loop(config: dict[str, Any]) -> None:
-	connector = TickerplantConnector(config.get("tickerplant", {}).get("url", "http://localhost:8000"))
+	connector = TickerplantConnector(_tickerplant_url(config))
 	aggregator = Aggregator(config)
 	while True:
 		try:

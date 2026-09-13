@@ -168,6 +168,13 @@ def get_metadata(
 
     _, start_date, end_date = _sanitize_meta(symbol, start, end)
     try:
+        pending = metadata.getPending(symbol, start_date, end_date)
+        done = metadata.getDone(symbol, start_date, end_date)
+        known = set(pending) | set(done)
+        for month in _month_keys(start_date, end_date):
+            if month not in known:
+                metadata.pushPending({symbol: month})
+
         retvalue = [
             {"year": year, "month": month}
             for year, month in metadata.getPending(symbol, start_date, end_date)

@@ -8,6 +8,7 @@ import yaml
 from fastapi import FastAPI, HTTPException, Query, Request
 
 from eval.connector import TickerplantConnector
+from eval.logging_config import configure_logging
 
 CONFIG_PATH = Path("/etc/eval/config.yaml")
 
@@ -42,10 +43,12 @@ def load_config(path: Path = CONFIG_PATH) -> EvalConfig:
 
 
 app = FastAPI(title="Eval API")
+request_logger = logging.getLogger("eval.requests")
 
 
 @app.on_event("startup")
 def initialize_connector() -> None:
+    configure_logging()
     config = load_config()
     app.state.connector = TickerplantConnector(base_url=config.tickerplant_url)
 
@@ -61,6 +64,7 @@ def check_data(
     if connector is None:
         raise HTTPException(status_code=500, detail="eval is not initialized")
 
+    request_logger.info("request received symbol=%s start=%s end=%s", symbol, start, end)
     try:
         pending = connector.meta(symbol, start, end)
     except Exception as exc:

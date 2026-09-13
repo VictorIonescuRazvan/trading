@@ -14,6 +14,17 @@ tickerplant_port: 8017
 
 `tickerplant_host` and `tickerplant_port` identify the tickerplant API.
 
+## Paths
+
+### Configuration
+- `/etc/eval/config.yaml`
+
+### Logs
+- `/var/log/eval/requests.log`
+    - requests received
+- `/var/log/eval/connector.log`
+    - calls to the connector package
+
 ## Run
 
 ```bash

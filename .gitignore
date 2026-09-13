@@ -1,4 +1,6 @@
 __pycache__/
 uv.lock
 .gitignore
-dataprovider/config.yaml
+.venv/
+.pytest_cache/
+context/

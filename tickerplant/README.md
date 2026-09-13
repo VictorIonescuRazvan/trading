@@ -1,18 +1,33 @@
 # Tickerplant
 
 Tickerplant is a FastAPI service backed by SQLite. It stores minute-level market
-data for ticker symbols and tracks which symbol/month metadata jobs are pending
-or complete.
+data for ticker symbols and tracks data availability and in progress queryies in a metadata table.
 
 ## Project layout
 
 - `src/tickerplant/api.py` contains the FastAPI application.
 - `src/tickerplant/dbquery.py` handles minute data in the `symbols` table.
-- `src/tickerplant/metadata.py` handles work status in the `symbolMetadata` table.
-- `src/tickerplant/init_db.py` applies the SQL schema files.
+- `src/tickerplant/metadata.py` handles metadata status in the `symbolMetadata` table.
+- `src/tickerplant/init_db.py` logic for initializing the db, if required.
 - `schemas/symbols.sql` and `schemas/symbolMetadata.sql` are the single source of
 	truth for the database schema.
 - `tests/` contains the pytest suite.
+
+## Paths
+
+### Logging
+- `/var/log/tickerplant/queries.log`
+	- db queries
+- `/var/log/tickerplant/requests.log`
+	- requests received
+
+### Configuration
+- `/etc/tickerplant/config.yaml`
+	- db_file: path of the database file
+
+### State
+- `/var/tickerplant/db.sql`
+	- or defined in db_file in config.yaml
 
 ## Requirements
 
@@ -26,47 +41,12 @@ cd /home/victor/trading/tickerplant
 uv sync
 ```
 
-## Configuration
-
-The service reads its runtime configuration from:
-
-```text
-/etc/tickerplant/config.yaml
-```
-
-The expected configuration is:
-
-```yaml
-metadata_port: 5001
-data_port: 5000
-db_file: /var/tickerplant/db.sql
-```
-
-The current FastAPI application listens on the port selected by the FastAPI/Uvicorn
-command, normally `8000`; `metadata_port` and `data_port` are retained as service
-configuration values but are not used by `api.py` to select separate listeners.
-
-The configured database directory must exist and be writable. The application
-creates the SQLite file and applies both schema files during startup.
-
-## Run the API
-
-Development mode with reload:
-
-```bash
-cd /home/victor/trading/tickerplant
-uv run fastapi dev
-```
-
-Production-style serving:
+## Run
 
 ```bash
 cd /home/victor/trading/tickerplant
 uv run fastapi run
 ```
-
-The application is available at `http://127.0.0.1:8000`. Interactive API
-documentation is available at `http://127.0.0.1:8000/docs`.
 
 ## API
 
@@ -94,8 +74,6 @@ curl -i -X POST http://127.0.0.1:8000/data \
 	}'
 ```
 
-This returns `204 No Content` and inserts the row into the `symbols` table.
-
 ### `POST /getdata`
 
 Return all stored data rows for the requested symbols and inclusive ISO date
@@ -121,7 +99,7 @@ The response is a JSON list of matching rows, including the stored `symbol`:
 
 ### `GET /meta`
 
-Return pending metadata months for a ticker and inclusive ISO date range:
+Evaluates time interval for given symbol. If a certain yy/mm is not marked as either done or pending, it's added as pending. Afterwards, it returns a list of pending yy/mm pairs for the symbol, after , see format below.
 
 ```bash
 curl 'http://127.0.0.1:8000/meta?symbol=AAPL&start=2024-01-01T00:00:00Z&end=2024-03-31T23:59:59Z'
@@ -160,6 +138,21 @@ Run the test suite with:
 cd /home/victor/trading/tickerplant
 uv run pytest
 ```
+The high-volume stress test is opt-in. It sends 100,000 requests in batches of
+approximately 1,000 concurrent requests:
+
+```bash
+RUN_STRESS_TESTS=1 uv run pytest -m stress
+```
+
+The mixed stress test covers all five endpoints; select it with:
+
+```bash
+RUN_STRESS_TESTS=1 uv run pytest -m stress -k mixed
+```
+
+Use `STRESS_REQUEST_COUNT` and `STRESS_CONCURRENCY` to adjust the load for a
+local smoke test.
 
 Database tests use temporary SQLite files. Live startup uses the database path in
 `/etc/tickerplant/config.yaml`.

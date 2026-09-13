@@ -1,7 +1,7 @@
 [project]
 name = "tickerplant"
 version = "0.1.0"
-description = "Add your description here"
+description = "Symbol database"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
@@ -20,8 +20,12 @@ build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
+    "httpx>=0.28.1",
     "pytest>=9.1.1",
 ]
 
 [tool.pytest.ini_options]
 pythonpath = [".", "src"]
+markers = [
+    "stress: high-volume load test, run explicitly with RUN_STRESS_TESTS=1",
+]
