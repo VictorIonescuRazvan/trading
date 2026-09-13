@@ -1,5 +1,4 @@
 __pycache__/
-uv.lock
 .gitignore
 .venv/
 .pytest_cache/
